@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
 import android.location.LocationManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -12,46 +13,63 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.android.volley.Request
-import com.android.volley.toolbox.StringRequest
-import com.android.volley.toolbox.Volley
 import com.example.googleassistant.MainActivity
 import com.example.googleassistant.R
+import com.example.googleassistant.data.Weather
+import com.example.googleassistant.data.WeatherApiService
 import com.example.googleassistant.databinding.ActivityExploreBinding
 import com.example.googleassistant.utils.Utils.Commands
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.material.chip.Chip
-import org.json.JSONObject
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Calendar
 
 class ExploreActivity : AppCompatActivity() {
-    private lateinit var binding:ActivityExploreBinding
-
-    var weather_url1 = "https://api.weatherbit.io/v2.0/current?lat=23.2836915&lon=77.4617912&key=bf39b322ecae4ebc82b09d6ef5849795"
-    //api id for url
-    var api_id1 = "bf39b322ecae4ebc82b09d6ef5849795"
-
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
+     private lateinit var binding:ActivityExploreBinding
+     var latitude:String?  = null
+     var longitude:String?= null
+     lateinit var weather_url1:String
+     private lateinit var API_KEY : String
+     private lateinit var fusedLocationClient: FusedLocationProviderClient
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityExploreBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        API_KEY = "c7346b27cf654f499c6cf75729fe525d"
+        weather_url1 = "https://api.weatherbit.io/v2.0/"
+        checkPermission()
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
 
+            val builder = AlertDialog.Builder(this)
 
-        if (ContextCompat.checkSelfPermission(this@ExploreActivity,
-                Manifest.permission.ACCESS_FINE_LOCATION) !==
-            PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this@ExploreActivity,
-                    Manifest.permission.ACCESS_FINE_LOCATION)) {
-                ActivityCompat.requestPermissions(this@ExploreActivity,
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
-            } else {
-                ActivityCompat.requestPermissions(this@ExploreActivity,
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+            builder.setTitle("Turn on \"Location\"")
+
+            builder.setMessage("\"Location\" is currently turned off. Turn on \"Location\" to enable navigation function in GoogleAssistant")
+
+            builder.setPositiveButton("OK") { _, _ ->
+                val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                startActivity(intent)
             }
-        }
 
+            // Display a negative button on alert dialog
+            builder.setNegativeButton("Cancel") { dialog, which ->
+                val intent = Intent(this, MainActivity::class.java)
+                startActivity(intent)
+            }
+
+            // Finally, make the alert dialog using builder
+            val dialog: AlertDialog = builder.create()
+            dialog.window?.setBackgroundDrawableResource(android.R.color.darker_gray)
+            // Display the alert dialog on app interface
+            dialog.show()
+        }
 
         for (command in Commands) {
             val chip = Chip(this)
@@ -61,47 +79,14 @@ class ExploreActivity : AppCompatActivity() {
             chip.setPadding(25, 10, 25, 10)
             binding.chipsCommand.addView(chip)
         }
-
-        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
-
-        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-
-            // Alert user to switch Location on in Settings
-            val builder = AlertDialog.Builder(this)
-
-
-            // Set the alert dialog title
-            builder.setTitle("Turn on \"Location\"")
-
-            // Display a message on alert dialog
-            builder.setMessage("\"Location\" is currently turned off. Turn on \"Location\" to enable navigation function in GoogleAssistant")
-
-            // Set a positive button and its click listener on alert dialog
-            builder.setPositiveButton("OK") { dialog, which ->
-
-                val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                startActivity(intent)
+        binding.weatherCardView.setOnClickListener {
+            if(latitude == null && longitude==null){
+                checkPermission()
+            }
+            else{
+                obtainLocation()
             }
 
-            // Display a negative button on alert dialog
-            builder.setNegativeButton("Cancel") { dialog, which ->
-                val intent = Intent(this, MainActivity::class.java)
-                startActivity(intent)
-
-            }
-
-            // Finally, make the alert dialog using builder
-            val dialog: AlertDialog = builder.create()
-            dialog.window?.setBackgroundDrawableResource(android.R.color.darker_gray);
-            // Display the alert dialog on app interface
-            dialog.show()
-        }
-
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-         Log.e("lat", weather_url1)
-        obtainLocation()
-             binding.weatherCardView.setOnClickListener {
-            obtainLocation()
         }
         val c: Calendar = Calendar.getInstance()
         when (c.get(Calendar.HOUR_OF_DAY)) {
@@ -121,35 +106,77 @@ class ExploreActivity : AppCompatActivity() {
 
     }
 
+    private fun checkPermission(){
+        val permissions = arrayOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (checkSelfPermission(permissions[0]) != PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(permissions[1])!=PackageManager.PERMISSION_GRANTED)
+        {
+            ActivityCompat.requestPermissions(this, permissions, 1)
+        }else{
+            fusedLocationClient.lastLocation.addOnSuccessListener {
+                if (it != null)
+                {
+                    handleLocation(it)
+                }
+                else{
+                    Toast.makeText(this, "Location is unavailable try after some time", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun handleLocation(location: Location) {
+        if (location!= null) {
+            latitude = location.latitude.toString()
+            longitude = location.longitude.toString()
+            obtainLocation()
+        } else {
+            Toast.makeText(this, "Location is unavailable try after some time", Toast.LENGTH_SHORT).show()
+        }
+    }
     private fun obtainLocation() {
-        Log.e("lat", "function")
-        Log.e("lat", weather_url1.toString())
-        //this function will fetch data from URL
-        // Instantiate the RequestQueue.
-        val queue = Volley.newRequestQueue(this)
-        Log.e("lat", "function0")
-        Log.e("lat", weather_url1)
-        // Request a string response from the provided URL.
-        val stringReq = StringRequest(
-            Request.Method.GET, weather_url1,
-            { response ->
-                Log.e("lat", response.toString())
-                //get the JSON object
-                val obj = JSONObject(response)
-                //get the Array from obj of name - "data"
-                val arr = obj.getJSONArray("data")
-                Log.e("lat obj1", arr.toString())
-                //get the JSON object from the array at index position 0
-                val obj2 = arr.getJSONObject(0)
-                Log.e("lat obj2", obj2.toString())
-                //set the temperature and the city name using getString() function
-                binding.textView.text = obj2.getString("temp") + "°C " + obj2.getString("city_name")
-                binding.today.text = "TODAY | " + obj2.getString("datetime")
-                binding.wind.text = obj2.getJSONObject("weather").getString("description")
-            },
-            //In case of any error
-            { Log.e("error", "not worked") })
-        queue.add(stringReq)
+        val lati = latitude
+        val long = longitude
+        if (long != null && lati != null) {
+            val api = Retrofit.Builder()
+            .baseUrl(weather_url1)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(WeatherApiService::class.java)
+            api.getWeatherData(lati,long,API_KEY,"minutely").enqueue(object:Callback<Weather>{
+                override fun onResponse(call: Call<Weather>, response: Response<Weather>) {
+                    if (response.isSuccessful){
+                        val body =  response.body()
+                        if (body != null){
+                            val data = body.data
+                            val cityname = data[0].city_name
+                            val temp = data[0].temp.toString()
+                            Log.e("puneet", cityname)
+                            binding.textView.text = " ${temp}°C $cityname "
+                            binding.wind.text = data[0].weather.description
+                            binding.today.text = data[0].datetime
+                        }
+                        else{
+                            Toast.makeText(this@ExploreActivity, "Error in api", Toast.LENGTH_SHORT).show()
+                        }
+                    }else{
+                        Toast.makeText(this@ExploreActivity, "Limit is exceeded try after some time", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onFailure(call: Call<Weather>, t: Throwable) {
+                    Log.e("puneet", "$t.message")
+                }
+
+            })
+        }else{
+           checkPermission()
+            Toast.makeText(this@ExploreActivity, "lat and long are not initialised", Toast.LENGTH_SHORT).show()
+        }
+
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
@@ -163,8 +190,10 @@ class ExploreActivity : AppCompatActivity() {
                             Manifest.permission.ACCESS_FINE_LOCATION) ==
                                 PackageManager.PERMISSION_GRANTED)) {
                         Toast.makeText(this, "Permission Granted", Toast.LENGTH_SHORT).show()
+
                     }
                 } else {
+
                     Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
                 }
                 return

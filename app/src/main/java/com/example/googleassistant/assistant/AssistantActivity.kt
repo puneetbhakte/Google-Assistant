@@ -1,6 +1,7 @@
 package com.example.googleassistant.assistant
 
-import android.animation.Animator
+
+import android.annotation.SuppressLint
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -11,7 +12,6 @@ import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognitionListener
@@ -26,25 +26,24 @@ import android.view.ViewAnimationUtils
 import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.example.googleassistant.R
 import com.example.googleassistant.data.AssistantDatabase
 import com.example.googleassistant.databinding.ActivityAssistantBinding
-import com.example.googleassistant.functions.AssistantFunction.Companion.Add
 import com.example.googleassistant.functions.AssistantFunction.Companion.Animation_TIME
 import com.example.googleassistant.functions.AssistantFunction.Companion.CAPTUREPHOTO
 import com.example.googleassistant.functions.AssistantFunction.Companion.Dips
-import com.example.googleassistant.functions.AssistantFunction.Companion.Divide
-import com.example.googleassistant.functions.AssistantFunction.Companion.Multiply
+import com.example.googleassistant.functions.AssistantFunction.Companion.News
 import com.example.googleassistant.functions.AssistantFunction.Companion.READCONTACTS
 import com.example.googleassistant.functions.AssistantFunction.Companion.READSMS
 import com.example.googleassistant.functions.AssistantFunction.Companion.REQUEST_CALL
 import com.example.googleassistant.functions.AssistantFunction.Companion.REQUEST_CODE_SELECT_DOC
 import com.example.googleassistant.functions.AssistantFunction.Companion.REQUEST_DISABLE_BT
 import com.example.googleassistant.functions.AssistantFunction.Companion.REQUEST_ENABLE_BT
+import com.example.googleassistant.functions.AssistantFunction.Companion.RecordCall
 import com.example.googleassistant.functions.AssistantFunction.Companion.SHAREAFILE
 import com.example.googleassistant.functions.AssistantFunction.Companion.SHAREATEXTFILE
-import com.example.googleassistant.functions.AssistantFunction.Companion.Sub
 import com.example.googleassistant.functions.AssistantFunction.Companion.callContact
 import com.example.googleassistant.functions.AssistantFunction.Companion.capturePhoto
 import com.example.googleassistant.functions.AssistantFunction.Companion.clipBoardCopy
@@ -105,6 +104,10 @@ class AssistantActivity : AppCompatActivity() {
 
 
 
+
+
+
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAssistantBinding.inflate(layoutInflater)
@@ -172,7 +175,6 @@ class AssistantActivity : AppCompatActivity() {
 
         }
         clipboardManager = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        helper = OpenWeatherMapHelper(R.string.OPEN_WEATHER_MAP_API_KEY.toString())
         textToSpeech = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 val result: Int = textToSpeech.setLanguage(Locale.ENGLISH)
@@ -225,10 +227,11 @@ class AssistantActivity : AppCompatActivity() {
                     keeper = data[0]
                     Log.d(logKeeper, keeper)
                     when {
-                        keeper.contains("+") ||keeper.contains("+") -> Add(textToSpeech, assistantViewModel, keeper)
-                        keeper.contains("-") -> Sub(textToSpeech, assistantViewModel, keeper)
-                        keeper.contains("*") ||keeper.contains("x") || keeper.contains("X") -> Multiply(textToSpeech, assistantViewModel, keeper)
-                        keeper.contains("/") -> Divide(textToSpeech, assistantViewModel, keeper)
+                        //  these are some maths operations
+                     //   keeper.contains("+") ||keeper.contains("+") -> Add(textToSpeech, assistantViewModel, keeper) //   keeper.contains("-") -> Sub(textToSpeech, assistantViewModel, keeper)
+                     //   keeper.contains("*") ||keeper.contains("x") || keeper.contains("X") -> Multiply(textToSpeech, assistantViewModel, keeper)
+                     //   keeper.contains("/") -> Divide(textToSpeech, assistantViewModel, keeper)
+                        keeper.contains("News") ||keeper.contains("news") || keeper.contains("Todays News") -> News(textToSpeech, assistantViewModel, keeper)
                         keeper.contains("joke") ||keeper.contains("tell me joke") -> joke(textToSpeech, assistantViewModel, keeper)
                         keeper.contains("thanks") -> speak("Its my job , let me know if there is something else", textToSpeech, assistantViewModel, keeper)
                         keeper.contains("search") -> search(this@AssistantActivity,keeper)
@@ -244,7 +247,7 @@ class AssistantActivity : AppCompatActivity() {
                         keeper.contains("open Maps") || keeper.contains("open maps")  || keeper.contains("maps")-> openMaps(this@AssistantActivity)
                         keeper.contains("open Google") || keeper.contains("open Google") || keeper.contains("open Chrome") -> openGoogle(this@AssistantActivity)
                         keeper.contains("open Whatsapp") || keeper.contains("open WhatsApp") -> openWhatsAPP(this@AssistantActivity)
-                        keeper.contains("open facebook") || keeper.contains("open Facebook") || keeper.contains("open Face") || keeper.contains("open Facebook") -> openFacebook(this@AssistantActivity)
+                        keeper.contains("open facebook") || keeper.contains("open Facebook") || keeper.contains("open Face") || keeper.contains("open Facebook") -> openFacebook(this@AssistantActivity,textToSpeech,assistantViewModel,keeper)
                         keeper.contains("open messages") || keeper.contains("open Messages")-> openMessages(this@AssistantActivity, applicationContext)
                         keeper.contains("how to use google assistant") || keeper.contains("google assistant") || keeper.contains("how to use") || keeper.contains("can I do") || keeper.contains("what can I do") || keeper.contains("Google assistant") || keeper.contains("can")-> speak("Try some Commands : open whatsapp , open facebook , tell me a joke , hi , hello , explore , google lens", textToSpeech, assistantViewModel, keeper)
                         keeper.contains("open youtube") || keeper.contains("open YouTube") -> openYoutube(this@AssistantActivity)
@@ -256,7 +259,7 @@ class AssistantActivity : AppCompatActivity() {
                             shareATextMessage(this@AssistantActivity, applicationContext, textToSpeech, assistantViewModel, keeper)
                         }
 
-                        keeper.contains("call") -> callContact(this@AssistantActivity, textToSpeech, assistantViewModel, keeper)
+                        keeper.contains("call") -> callContact(applicationContext,this@AssistantActivity, textToSpeech, assistantViewModel, keeper)
                         keeper.contains("turn on bluetooth") || keeper.contains("turn on Bluetooth") -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             turnOnBluetooth(this@AssistantActivity,applicationContext,textToSpeech, assistantViewModel, keeper)
                         }
@@ -315,7 +318,8 @@ class AssistantActivity : AppCompatActivity() {
         binding.assistantAction.setOnTouchListener {
                 view, motionEvent ->
             when (motionEvent.action) {
-                   MotionEvent.ACTION_UP -> {
+
+                MotionEvent.ACTION_UP -> {
                         speechRecognizer.stopListening()
                                       }
 
@@ -383,7 +387,7 @@ class AssistantActivity : AppCompatActivity() {
             }
         } else if (requestCode == READCONTACTS) {
             if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
-                callContact(this, textToSpeech, assistantViewModel, keeper)
+                callContact(applicationContext,this, textToSpeech, assistantViewModel, keeper)
             } else {
                 Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
             }
@@ -394,8 +398,16 @@ class AssistantActivity : AppCompatActivity() {
                 Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
             }
         }
+        else if (requestCode == RecordCall){
+            if (grantResults.isNotEmpty() && grantResults[0] == PERMISSION_GRANTED) {
+                //RecordCall(this@AssistantActivity,applicationContext,textToSpeech, assistantViewModel, keeper)
+            } else {
+                Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CODE_SELECT_DOC && resultCode == RESULT_OK) {
@@ -487,45 +499,6 @@ class AssistantActivity : AppCompatActivity() {
 
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        super.onBackPressed()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            val cx: Int = binding.assistantConstraintLayout.width - getDips(Dips)
-            val cy = binding.assistantConstraintLayout.height - getDips(Dips)
-            val finalRadius: Int = Math.max(
-                binding.assistantConstraintLayout.width,
-                binding.assistantConstraintLayout.height
-            )
-            val circularReveal = ViewAnimationUtils.createCircularReveal(binding.assistantConstraintLayout, cx, cy, finalRadius.toFloat(), 0f)
-            circularReveal.addListener(object : Animator.AnimatorListener {
-
-                override fun onAnimationStart(p0: Animator) {
-                    TODO("Not yet implemented")
-                }
-
-                override fun onAnimationEnd(p0: Animator) {
-                    binding.assistantConstraintLayout.visibility = View.GONE
-                    finish()
-
-                }
-
-                override fun onAnimationCancel(p0: Animator) {
-                    TODO("Not yet implemented")
-                }
-
-                override fun onAnimationRepeat(p0: Animator) {
-                    TODO("Not yet implemented")
-                }
-            })
-            circularReveal.duration = Animation_TIME.toLong()
-            circularReveal.start()
-
-
-        } else {
-            super.onBackPressed()
-        }
-    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -535,6 +508,8 @@ class AssistantActivity : AppCompatActivity() {
         speechRecognizer.destroy()
         Log.i(logSR, "destroy")
     }
+
+
 
 
 }

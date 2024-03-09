@@ -6,14 +6,13 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
-import android.hardware.camera2.CameraManager
-import android.content.ClipboardManager
-import android.content.pm.PackageManager
 import android.database.Cursor
 import android.graphics.Bitmap
+import android.hardware.camera2.CameraManager
 import android.media.Ringtone
 import android.net.Uri
 import android.os.Build
@@ -23,28 +22,35 @@ import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import android.provider.Telephony
-import android.telephony.SmsManager
 import android.speech.tts.TextToSpeech
+import android.telephony.SmsManager
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import java.text.DateFormat
-import java.text.SimpleDateFormat
-import java.util.*
 import com.example.googleassistant.assistant.AssistantViewModel
+import com.example.googleassistant.data.ApiService
+import com.example.googleassistant.data.NewsArticles
 import com.example.googleassistant.utils.Utils.logKeeper
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizerOptionsInterface
 import com.ml.quaterion.text2summary.Text2Summary
 import com.theartofdev.edmodo.cropper.CropImage
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 import java.io.IOException
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.*
 
 
 class AssistantFunction {
+
 
     companion object {
         var Dips = 44
@@ -60,6 +66,10 @@ class AssistantFunction {
         var REQUEST_CODE_SELECT_DOC: Int = 100
         var REQUEST_ENABLE_BT = 1000
         var REQUEST_DISABLE_BT = 11
+        var Api_key:String = "fa924cfcba9449579c8b45750d4719ed"
+        var baseUrl:String = "https://newsapi.org/v2/"
+        var RecordCall = 55
+
         var questions: List<String> = listOf<String>(
             " What would you name your boat if you had one? ",
             "What's the closest thing to real magic?",
@@ -92,9 +102,17 @@ class AssistantFunction {
             speak("The Time is $time", textToSpeech, assistantViewModel, keeper)
         }
 
-        fun openFacebook(activity: Activity) {
-            val intent = activity.packageManager.getLaunchIntentForPackage("com.facebook.katana")
-            intent.let { activity.startActivity(it) }
+        fun openFacebook(activity: Activity,textToSpeech: TextToSpeech,assistantViewModel:AssistantViewModel,keeper: String) {
+            try {
+                val intent = activity.packageManager.getLaunchIntentForPackage("com.facebook.katana")
+                intent.let { activity.startActivity(it) }
+            }catch (e: Exception){
+                e.printStackTrace()
+                Log.d("error in Facebook", e.message.toString())
+                speak("Facebook is not install on your Phone", textToSpeech, assistantViewModel, keeper)
+
+            }
+
 
         }
 
@@ -261,12 +279,13 @@ class AssistantFunction {
         }
         fun search(activity: Activity, keeper: String)
         {
-            val uri = Uri.parse("https://www.google.com/search?q=$keeper")
+          val search =   keeper.removePrefix("search")
+            val uri = Uri.parse("https://www.google.com/search?q=$search")
             val gSearchIntent = Intent(Intent.ACTION_VIEW, uri)
             activity.startActivity(gSearchIntent)
         }
 
-        fun callContact(activity: Activity, textToSpeech: TextToSpeech, assistantViewModel: AssistantViewModel, keeper: String) {
+        fun callContact(context: Context,activity: Activity, textToSpeech: TextToSpeech, assistantViewModel: AssistantViewModel, keeper: String) {
             var number= ""
             if (ContextCompat.checkSelfPermission(
                     activity, Manifest.permission.READ_CONTACTS
@@ -285,8 +304,8 @@ class AssistantFunction {
                     val phones: Cursor = activity.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null)!!
                     while (phones.moveToNext()) {
                         var contactName: String = phones.getString(phones.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME))
-                        contactName=contactName.toLowerCase()
-                        if (contactName.contains(name.toLowerCase())) {
+                        contactName=contactName.toLowerCase(Locale.ROOT)
+                        if (contactName.contains(name.toLowerCase(Locale.ROOT))) {
                             number = phones.getString(phones.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER))
                             Log.d("number", number)
                         }
@@ -326,7 +345,7 @@ class AssistantFunction {
             val bluetoothManager: BluetoothManager = context.getSystemService(BluetoothManager::class.java)
             val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
             if (bluetoothAdapter == null) {
-                // Device doesn't support Bluetooth
+                Toast.makeText(context, "This device is not supporting bluetooth", Toast.LENGTH_SHORT).show()
             }
 
             if (bluetoothAdapter != null) {
@@ -362,6 +381,8 @@ class AssistantFunction {
                             Manifest.permission.BLUETOOTH_CONNECT
                         ) != PERMISSION_GRANTED
                     ) {
+                        ActivityCompat.requestPermissions(activity,
+                            arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADMIN), REQUEST_ENABLE_BT)
                     }
                     bluetoothAdapter.disable()
                     val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
@@ -388,13 +409,7 @@ class AssistantFunction {
                                 Manifest.permission.BLUETOOTH_CONNECT
                             ) != PERMISSION_GRANTED
                         ) {
-                            // TODO: Consider calling
-                            //    ActivityCompat#requestPermissions
-                            // here to request the missing permissions, and then overriding
-                            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                            //                                          int[] grantResults)
-                            // to handle the case where the user grants the permission. See the documentation
-                            // for ActivityCompat#requestPermissions for more details.
+
                             return
                         }
                         text += "\nDevices : $count ${device.name}"
@@ -411,10 +426,8 @@ class AssistantFunction {
 
         fun turnOnFlash(cameraManager: CameraManager, cameraID: String, textToSpeech: TextToSpeech, assistantViewModel: AssistantViewModel, keeper: String) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    cameraManager.setTorchMode(cameraID, true)
-                    speak("Flash Turned On", textToSpeech, assistantViewModel, keeper)
-                }
+                cameraManager.setTorchMode(cameraID, true)
+                speak("Flash Turned On", textToSpeech, assistantViewModel, keeper)
             } catch (e: Exception) {
                 e.printStackTrace()
                 speak("Sorry ! Error Occurred", textToSpeech, assistantViewModel, keeper)
@@ -423,10 +436,8 @@ class AssistantFunction {
 
         fun turnOffFlash(cameraManager: CameraManager, cameraID: String, textToSpeech: TextToSpeech, assistantViewModel: AssistantViewModel, keeper: String) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    cameraManager.setTorchMode(cameraID, false)
-                    speak("Flash Turned Off", textToSpeech, assistantViewModel, keeper)
-                }
+                cameraManager.setTorchMode(cameraID, false)
+                speak("Flash Turned Off", textToSpeech, assistantViewModel, keeper)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -645,6 +656,46 @@ class AssistantFunction {
             return matchResult?.value ?: ""
         }
 
+        fun News(textToSpeech: TextToSpeech,assistantViewModel: AssistantViewModel,keeper: String){
+            val api = Retrofit.Builder()
+                .baseUrl(baseUrl)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+                .create(ApiService::class.java)
+
+            api.getnews("in","general","en",Api_key).enqueue(object: Callback<NewsArticles> {
+                override fun onResponse(
+                    call: Call<NewsArticles>,
+                    response: Response<NewsArticles>,
+                ) {
+                    if (response.isSuccessful){
+                        val body =  response.body()
+                        if (body != null){
+                            val Articles = body.articles
+                            var news  = ArrayList<String>()
+                            var count = 0
+                            for (i in Articles){
+                                news.add("${count+1}. ${i.title} ")
+                                count++
+                                if (count==5){
+                                    break
+                                }
+                            }
+                            speak("Some of the top news are : $news", textToSpeech ,assistantViewModel,keeper)
+                        //    val title1 = title[0].
+                            //Log.i("TAG","Title: $title1")
+                        }
+                    }
+
+                }
+
+                override fun onFailure(call: Call<NewsArticles>, t: Throwable) {
+                    Log.i("Fail","ON fail: ${t.message}")
+                }
+
+            })
+        }
+
+        }
 
     }
-}

@@ -18,15 +18,21 @@
         </ImageView>
     </androidx.appcompat.widget.Toolbar>
 
-    <ImageView android:layout_width="match_parent"
+    <ImageView
         android:id="@+id/hiGoogle"
-        android:src="@drawable/hi"
+        android:layout_width="match_parent"
+        android:layout_height="500dp"
+        android:layout_marginTop="25dp"
         android:clickable="true"
-        android:layout_height="wrap_content"
-        tools:ignore="MissingConstraints"
+        android:contentDescription="@string/todo"
         android:focusable="true"
-        android:contentDescription="@string/todo">
-    </ImageView>
+        android:src="@drawable/hi"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/date_time"
+        tools:ignore="MissingConstraints" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:orientation="horizontal"
@@ -77,4 +83,17 @@
             </ImageView>
         </LinearLayout>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/date_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="TextView"
+        android:textSize="18sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.632"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/toolbar" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
